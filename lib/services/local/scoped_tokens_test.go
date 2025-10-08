@@ -25,15 +25,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/gravitational/teleport/lib/backend"
-	"github.com/gravitational/teleport/lib/backend/memory"
-	"github.com/gravitational/teleport/lib/services"
-	"github.com/gravitational/teleport/lib/services/local"
-
+	"github.com/gravitational/teleport/api/defaults"
 	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
 	joiningv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/joining/v1"
 	scopesv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/v1"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/lib/backend"
+	"github.com/gravitational/teleport/lib/backend/memory"
+	"github.com/gravitational/teleport/lib/services"
+	"github.com/gravitational/teleport/lib/services/local"
 )
 
 func assertEqualScopedTokens(t *testing.T, expected *joiningv1.ScopedToken, val *joiningv1.ScopedToken) bool {
@@ -52,8 +52,11 @@ func TestScopedTokenService(t *testing.T) {
 	ctx := t.Context()
 
 	token := &joiningv1.ScopedToken{
+		Kind:    types.KindScopedToken,
+		Version: types.V1,
 		Metadata: &headerv1.Metadata{
-			Name: "testtoken",
+			Name:      "testtoken",
+			Namespace: defaults.Namespace,
 		},
 		Scope: "/test",
 		Spec: &joiningv1.ScopedTokenSpec{
@@ -122,6 +125,9 @@ func TestScopedTokenList(t *testing.T) {
 	test2.Metadata.Name = "test2"
 	test2.Scope = "/test/bb"
 	test2.Spec.AssignedScope = test2.Scope
+	test2.Metadata.Labels = map[string]string{
+		"hello": "world",
+	}
 
 	test3 := proto.CloneOf(test)
 	test3.Metadata.Name = "test3"
@@ -265,6 +271,20 @@ func TestScopedTokenList(t *testing.T) {
 				Roles: types.SystemRoles{types.RoleNode},
 			},
 			expected: []*joiningv1.ScopedToken{test, test1, test2, test3},
+		},
+		{
+			name: "tokens in /test scope filtered by label",
+			filters: &services.ScopedTokenFilters{
+				ResourceScope: &scopesv1.Filter{
+					Mode:  scopesv1.Mode_MODE_RESOURCES_SUBJECT_TO_SCOPE,
+					Scope: "/test",
+				},
+				Roles: types.SystemRoles{types.RoleNode},
+				Labels: map[string]string{
+					"hello": "world",
+				},
+			},
+			expected: []*joiningv1.ScopedToken{test2},
 		},
 	}
 
