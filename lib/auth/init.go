@@ -1489,21 +1489,57 @@ func createPresetDatabaseObjectImportRule(ctx context.Context, rules services.Da
 // createPresetHealthCheckConfig creates a default preset health check config
 // resource that enables health checks on all resources.
 func createPresetHealthCheckConfig(ctx context.Context, svc services.HealthCheckConfig) error {
+	// To support developing health checks for multiple resources over time,
+	// while avoiding migration of the backend database,
+	// and enabling ease of health check adoption:
+	// 	- Create a health check preset for each resource (db, kube, etc)
+
 	page, _, err := svc.ListHealthCheckConfigs(ctx, 0, "")
 	if err != nil {
 		return trace.Wrap(err, "failed listing available health check configs")
 	}
-	if len(page) > 0 {
+	if len(page) == 0 {
+		// No health check configs exist.
+		// Create all preset configs.
+		presetDB := services.NewPresetHealthCheckConfigDB()
+		_, err = svc.CreateHealthCheckConfig(ctx, presetDB)
+		if err != nil && !trace.IsAlreadyExists(err) {
+			return trace.Wrap(err,
+				"failed creating preset health_check_config %s",
+				presetDB.GetMetadata().GetName(),
+			)
+		}
+		presetKube := services.NewPresetHealthCheckConfigKube()
+		_, err = svc.CreateHealthCheckConfig(ctx, presetKube)
+		if err != nil && !trace.IsAlreadyExists(err) {
+			return trace.Wrap(err,
+				"failed creating preset health_check_config %s",
+				presetKube.GetMetadata().GetName(),
+			)
+		}
 		return nil
+	} else {
+		// Health check configs exist.
+		// Create per-resource presets.
+		// Skip creating a DB preset; historically, it's the first, and already exists.
+
+		// Look for an existing kube preset.
+		for _, cfg := range page {
+			if cfg.GetMetadata().GetName() == teleport.PresetDefaultHealthCheckConfigKubeName {
+				return nil
+			}
+		}
+		// Create a kube preset.
+		presetKube := services.NewPresetHealthCheckConfigKube()
+		_, err = svc.CreateHealthCheckConfig(ctx, presetKube)
+		if err != nil && !trace.IsAlreadyExists(err) {
+			return trace.Wrap(err,
+				"failed creating preset health_check_config %s",
+				presetKube.GetMetadata().GetName(),
+			)
+		}
 	}
-	preset := services.NewPresetHealthCheckConfig()
-	_, err = svc.CreateHealthCheckConfig(ctx, preset)
-	if err != nil && !trace.IsAlreadyExists(err) {
-		return trace.Wrap(err,
-			"failed creating preset health_check_config %s",
-			preset.GetMetadata().GetName(),
-		)
-	}
+
 	return nil
 }
 

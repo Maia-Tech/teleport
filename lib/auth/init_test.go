@@ -985,7 +985,7 @@ func TestPresets(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		cfg, err := as.GetHealthCheckConfig(ctx, teleport.PresetDefaultHealthCheckConfigName)
+		cfg, err := as.GetHealthCheckConfig(ctx, teleport.PresetDefaultHealthCheckConfigDBName)
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 	})
@@ -1021,7 +1021,7 @@ func TestPresets(t *testing.T) {
 		as.SetClock(clock)
 
 		// an existing health check config should not be modified by init
-		cfg := services.NewPresetHealthCheckConfig()
+		cfg := services.NewPresetHealthCheckConfigDB()
 		cfg.Spec.Interval = durationpb.New(42 * time.Second)
 		cfg, err := as.CreateHealthCheckConfig(ctx, cfg)
 		require.NoError(t, err)
