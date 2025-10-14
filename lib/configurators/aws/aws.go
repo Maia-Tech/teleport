@@ -997,7 +997,7 @@ func buildSSMDocumentCreators(ctx context.Context, config ConfiguratorConfig, ta
 			ssmCreator := awsSSMDocumentCreator{
 				ssm:       ssmClient,
 				Name:      matcher.SSM.DocumentName,
-				Contents:  awslib.EC2DiscoverySSMDocument(proxyAddr),
+				Contents:  awslib.EC2DiscoveryLegacySSMDocument(proxyAddr),
 				accountID: targetCfg.identity.GetAccountID(),
 			}
 			creators = append(creators, &ssmCreator)

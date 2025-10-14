@@ -70,7 +70,7 @@ func TestAWSMatcherCheckAndSetDefaults(t *testing.T) {
 					SSHDConfig:      "/etc/ssh/sshd_config",
 					EnrollMode:      InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_SCRIPT,
 				},
-				SSM: &AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &AWSSSM{DocumentName: "AWS-RunShellScript"},
 				AssumeRole: &AssumeRole{
 					RoleARN: "arn:aws:iam:us-west-2:123456789012:role/MyRole001",
 				},
@@ -97,7 +97,7 @@ func TestAWSMatcherCheckAndSetDefaults(t *testing.T) {
 					SSHDConfig:      "/etc/ssh/sshd_config",
 					EnrollMode:      InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_SCRIPT,
 				},
-				SSM: &AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &AWSSSM{DocumentName: "AWS-RunShellScript"},
 			},
 		},
 		{
@@ -235,7 +235,7 @@ func TestAWSMatcherCheckAndSetDefaults(t *testing.T) {
 				AssumeRole: &AssumeRole{
 					ExternalID: "id123",
 				},
-				SSM: &AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &AWSSSM{DocumentName: "AWS-RunShellScript"},
 			},
 		},
 		{
@@ -259,7 +259,7 @@ func TestAWSMatcherCheckAndSetDefaults(t *testing.T) {
 					SSHDConfig:      "/etc/ssh/sshd_config",
 					EnrollMode:      InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_SCRIPT,
 				},
-				SSM: &AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &AWSSSM{DocumentName: "AWS-RunShellScript"},
 			},
 		},
 		{
@@ -289,7 +289,7 @@ func TestAWSMatcherCheckAndSetDefaults(t *testing.T) {
 					SSHDConfig:      "/etc/ssh/sshd_config",
 					EnrollMode:      InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_EICE,
 				},
-				SSM: &AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &AWSSSM{DocumentName: "AWS-RunShellScript"},
 			},
 		},
 		{
@@ -330,7 +330,7 @@ func TestAWSMatcherCheckAndSetDefaults(t *testing.T) {
 					SSHDConfig:      "/etc/ssh/sshd_config",
 					EnrollMode:      InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_SCRIPT,
 				},
-				SSM: &AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &AWSSSM{DocumentName: "AWS-RunShellScript"},
 			},
 		},
 		{

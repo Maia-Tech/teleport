@@ -1714,7 +1714,7 @@ func TestAWSDocumentConfigurator(t *testing.T) {
 		getSSMClient: makeSSMClientGetter("eu-central-1", "", "", &ssmMock{
 			t: t,
 			expectedInput: &ssm.CreateDocumentInput{
-				Content:        aws.String(awslib.EC2DiscoverySSMDocument("https://proxy.example.org:443")),
+				Content:        aws.String(awslib.EC2DiscoveryLegacySSMDocument("https://proxy.example.org:443")),
 				DocumentType:   ssmtypes.DocumentTypeCommand,
 				DocumentFormat: ssmtypes.DocumentFormatYaml,
 				Name:           aws.String("document"),

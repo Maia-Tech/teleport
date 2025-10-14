@@ -35,6 +35,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/usertasks"
 	awslib "github.com/gravitational/teleport/lib/cloud/aws"
@@ -415,7 +416,7 @@ func (si *SSMInstaller) checkCommand(ctx context.Context, req SSMRunRequest, com
 			"Add ssm:ListCommandInvocations action to IAM Role to improve diagnostics of EC2 Teleport installation failures",
 			"error", err)
 
-		invocationSteps = awslib.EC2DiscoverySSMDocumentSteps
+		invocationSteps = awslib.EC2DiscoveryCustomSSMDocumentSteps
 
 	case err != nil:
 		return trace.Wrap(err)
@@ -467,6 +468,12 @@ func (si *SSMInstaller) checkCommand(ctx context.Context, req SSMRunRequest, com
 }
 
 func (si *SSMInstaller) getInvocationSteps(ctx context.Context, req SSMRunRequest, commandID, instanceID *string) ([]string, error) {
+	if req.DocumentName == types.AWSInstallerDocument {
+		// The default SSM Document is AWS-RunShellScript, which has no defined steps, only params.
+		// Return early, preventing a call to ssm:ListCommandInvocations.
+		return []string{""}, nil
+	}
+
 	// ssm:ListCommandInvocations is used to list the actual steps because users might be using a custom SSM Document.
 	listCommandInvocationResp, err := req.SSM.ListCommandInvocations(ctx, &ssm.ListCommandInvocationsInput{
 		CommandId:  commandID,

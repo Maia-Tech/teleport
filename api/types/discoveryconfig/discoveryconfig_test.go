@@ -96,7 +96,7 @@ func TestNewDiscoveryConfig(t *testing.T) {
 						Regions: []string{"eu-west-2"},
 						Tags:    types.Labels{"*": []string{"*"}},
 						SSM: &types.AWSSSM{
-							DocumentName: "TeleportDiscoveryInstaller",
+							DocumentName: "AWS-RunShellScript",
 						},
 						Params: &types.InstallerParams{
 							JoinMethod:      "iam",

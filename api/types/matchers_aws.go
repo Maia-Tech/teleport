@@ -37,9 +37,15 @@ const (
 	// when using the agentless installer
 	SSHDConfigPath = "/etc/ssh/sshd_config"
 
+	// AWSInstallerLegacyDocument is the name of the legacy AWS document
+	// that is called when executing the SSM command.
+	AWSInstallerLegacyDocument = "TeleportDiscoveryInstaller"
+
 	// AWSInstallerDocument is the name of the default AWS document
 	// that will be called when executing the SSM command.
-	AWSInstallerDocument = "TeleportDiscoveryInstaller"
+	// The `AWS-RunShellScript` is a pre-defined Systems Manager document.
+	// It is available in all AWS accounts and does not need to be manually created.
+	AWSInstallerDocument = "AWS-RunShellScript"
 
 	// AWSAgentlessInstallerDocument is the name of the default AWS document
 	// that will be called when executing the SSM command .

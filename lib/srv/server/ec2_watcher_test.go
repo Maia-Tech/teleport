@@ -276,9 +276,11 @@ func TestEC2Watcher(t *testing.T) {
 		"alternate-role-arn": &altAccountOutput,
 	})
 
-	const noDiscoveryConfig = ""
 	fetchersFn := func() []Fetcher {
-		fetchers, err := matchersToEC2InstanceFetchers(t.Context(), matchers, getClient, noDiscoveryConfig)
+		fetchers, err := matchersToEC2InstanceFetchers(t.Context(), MatcherParamsToEC2Fetcher{
+			Matchers:        matchers,
+			PublicProxyAddr: "proxy.example.com:3080",
+		}, getClient)
 		require.NoError(t, err)
 
 		return fetchers
@@ -345,7 +347,10 @@ func TestMatchersToEC2InstanceFetchers(t *testing.T) {
 		SSM:     &types.AWSSSM{},
 	}}
 
-	fetchers, err := MatchersToEC2InstanceFetchers(t.Context(), matchers, ec2ClientGetter, "")
+	fetchers, err := MatchersToEC2InstanceFetchers(t.Context(), MatcherParamsToEC2Fetcher{
+		Matchers:        matchers,
+		EC2ClientGetter: ec2ClientGetter,
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, fetchers)
 }
@@ -388,7 +393,7 @@ func TestMakeEvents(t *testing.T) {
 				Instances: []EC2Instance{{
 					InstanceID: "i-123456789012",
 				}},
-				DocumentName: "TeleportDiscoveryInstaller",
+				DocumentName: "AWS-RunShellScript",
 			},
 			expected: map[string]*usageeventsv1.ResourceCreateEvent{
 				"aws/i-123456789012": {

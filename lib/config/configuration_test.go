@@ -4931,7 +4931,7 @@ func TestDiscoveryConfig(t *testing.T) {
 					InstallTeleport: true,
 					EnrollMode:      types.InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_SCRIPT,
 				},
-				SSM: &types.AWSSSM{DocumentName: "TeleportDiscoveryInstaller"},
+				SSM: &types.AWSSSM{DocumentName: "AWS-RunShellScript"},
 				AssumeRole: &types.AssumeRole{
 					RoleARN:    "",
 					ExternalID: "externalid123",

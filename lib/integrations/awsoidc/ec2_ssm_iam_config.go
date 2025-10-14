@@ -182,7 +182,7 @@ func ConfigureEC2SSM(ctx context.Context, clt EC2SSMConfigureClient, req EC2SSMI
 		return trace.Wrap(err)
 	}
 
-	content := awslib.EC2DiscoverySSMDocument(req.ProxyPublicURL,
+	content := awslib.EC2DiscoveryLegacySSMDocument(req.ProxyPublicURL,
 		awslib.WithInsecureSkipInstallPathRandomization(req.insecureSkipInstallPathRandomization),
 	)
 	tags := defaultResourceCreationTags(req.ClusterName, req.IntegrationName)

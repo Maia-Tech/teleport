@@ -38,10 +38,12 @@ func WithInsecureSkipInstallPathRandomization(setting bool) func(*EC2DiscoverySS
 	}
 }
 
-// EC2DiscoverySSMDocument receives the proxy address and returns an SSM Document.
+// EC2DiscoveryLegacySSMDocument receives the proxy address and returns an SSM Document.
 // This document downloads and runs a Teleport installer.
 // Requires the proxy endpoint URL, example: https://tenant.teleport.sh
-func EC2DiscoverySSMDocument(proxy string, opts ...func(*EC2DiscoverySSMDocumentOptions)) string {
+// This is the legacy document, used in pre-v19 versions of Teleport.
+// The new document uses the AWS-RunShellScript pre-defined document, which exists in all AWS accounts by default.
+func EC2DiscoveryLegacySSMDocument(proxy string, opts ...func(*EC2DiscoverySSMDocumentOptions)) string {
 	var options EC2DiscoverySSMDocumentOptions
 	for _, optFn := range opts {
 		optFn(&options)
@@ -86,9 +88,9 @@ mainSteps:
 
 const EC2DiscoveryPolicyName = "TeleportEC2Discovery"
 
-// EC2DiscoverySSMDocumentSteps is the list of Steps defined in the default SSM Document for Teleport Discovery.
+// EC2DiscoveryCustomSSMDocumentSteps is the list of Steps defined in the default SSM Document for Teleport Discovery.
 // Used to query step results after executing a command using SSM.
-var EC2DiscoverySSMDocumentSteps = []string{
+var EC2DiscoveryCustomSSMDocumentSteps = []string{
 	"downloadContent",
 	"runShellScript",
 }
