@@ -2551,6 +2551,20 @@ type DebugService struct {
 	Service `yaml:",inline"`
 }
 
+// LocateKDCServer automatically locates the KDC server using DNS SRV records
+type LocateKDCServer struct {
+	// Enabled will automatically locate the KDC server using DNS SRV records.
+	// When enabled, Domain must be set, KDCAddress will be ignored
+	// https://web.mit.edu/kerberos/krb5-1.4/krb5-1.4.1/doc/krb5-admin/Hostnames-for-KDCs.html
+	Enabled bool `yaml:"enabled,omitempty"`
+	// Site is an KDC site to locate servers from a specific logical site.
+	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/b645c125-a7da-4097-84a1-2fa7cea07714#gt_8abdc986-5679-42d9-ad76-b11eb5a0daba
+	Site string `yaml:"site,omitempty"`
+	// Port is the port that should be used to connect to the KDC server.
+	// This will override the port returned by SRV records.
+	Port string `yaml:"port,omitempty"`
+}
+
 // WindowsDesktopService contains configuration for windows_desktop_service.
 type WindowsDesktopService struct {
 	Service `yaml:",inline"`
@@ -2575,6 +2589,8 @@ type WindowsDesktopService struct {
 	// Note: NLA is only supported in Active Directory environments - this field has
 	// no effect when connecting to desktops as local Windows users.
 	KDCAddress string `yaml:"kdc_address"`
+	// LocateKDCServer is the config that enables KDC server location using DNS SRV records.
+	LocateKDCServer LocateKDCServer `yaml:"locate_kdc_server"`
 	// Discovery configures desktop discovery via LDAP.
 	// New usages should prever DiscoveryConfigs instead, which allows for multiple searches.
 	Discovery LDAPDiscoveryConfig `yaml:"discovery,omitempty"`

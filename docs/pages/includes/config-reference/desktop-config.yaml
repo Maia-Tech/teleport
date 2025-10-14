@@ -86,6 +86,17 @@ windows_desktop_service:
   # no effect when connecting to desktops as local Windows users.
   kdc_address: "$KDC_SERVER_ADDRESS"
 
+  # locate_kdc_server gets a list of available KDC servers from the AD 
+  # domain's SRV records. When enabled, kdc_address is ignored.
+  locate_kdc_server:
+    enabled: true
+    # (optional) Site is the logical AD site that locate_kdc_server should return.
+    # Ignored if locate_server is false.
+    site: "$KDC_SITE_NAME"
+    # (optional) The port to use for KDC.
+    # Uses port returned by DNS SRV record, if not set.
+    port: 88
+
   # (optional) static_hosts is a list of hosts to register as WindowsDesktop
   # objects in Teleport. You can define host name and labels directly.
   static_hosts:

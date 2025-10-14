@@ -21,25 +21,26 @@ package winpki
 import (
 	"context"
 	"net"
+	"strconv"
 
 	"github.com/gravitational/trace"
 )
 
-// locateLDAPServer looks up the LDAP server in an Active Directory
-// environment by implementing the DNS-based discovery DC locator
-// process.
+// LocateServerBySRV looks up a server of a given service and port
+// in an Active Directory environment by implementing the
+// DNS-based discovery DC locator process.
 //
 // See https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/dc-locator?tabs=dns-based-discovery
-func locateLDAPServer(ctx context.Context, domain string, site string, resolver *net.Resolver) ([]string, error) {
+func LocateServerBySRV(ctx context.Context, domain string, site string, resolver *net.Resolver, service string, port string) ([]string, error) {
 	tryDomain := domain
 	if site != "" {
 		tryDomain = site + "._sites." + domain
 	}
 
-	_, records, err := resolver.LookupSRV(ctx, "ldap", "tcp", tryDomain)
+	_, records, err := resolver.LookupSRV(ctx, service, "tcp", tryDomain)
 	if err != nil && site != "" {
 		// If the site lookup fails, try the domain directly.
-		_, records, err = resolver.LookupSRV(ctx, "ldap", "tcp", domain)
+		_, records, err = resolver.LookupSRV(ctx, service, "tcp", domain)
 	}
 
 	if err != nil {
@@ -49,9 +50,14 @@ func locateLDAPServer(ctx context.Context, domain string, site string, resolver 
 	// note: LookupSRV already returns records sorted by priority and takes in to account weights
 	var result []string
 	for _, record := range records {
-		// SRV records will likely return the insecure LDAP port,
-		// so we ignore it and hard code the LDAPS port.
-		result = append(result, net.JoinHostPort(record.Target, "636"))
+		// If a port has been passed, use that.
+		// If not, use the port returned by the SRV record.
+		usePort := strconv.Itoa(int(record.Port))
+		if port != "" {
+			usePort = port
+		}
+
+		result = append(result, net.JoinHostPort(record.Target, usePort))
 	}
 
 	return result, nil

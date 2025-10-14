@@ -231,6 +231,7 @@ func (process *TeleportProcess) initWindowsDesktopServiceRegistered(logger *slog
 		ShowDesktopWallpaper: cfg.WindowsDesktop.ShowDesktopWallpaper,
 		LDAPConfig:           cfg.WindowsDesktop.LDAP,
 		KDCAddr:              cfg.WindowsDesktop.KDCAddr,
+		LocateKDCServer:      cfg.WindowsDesktop.LocateKDCServer,
 		PKIDomain:            cfg.WindowsDesktop.PKIDomain,
 		Discovery:            cfg.WindowsDesktop.Discovery,
 		DiscoveryInterval:    cfg.WindowsDesktop.DiscoveryInterval,

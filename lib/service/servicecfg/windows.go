@@ -55,7 +55,8 @@ type WindowsDesktopConfig struct {
 	// If empty, the LDAP address will be used instead.
 	// Note: NLA is only supported in Active Directory environments - this field has
 	// no effect when connecting to desktops as local Windows users.
-	KDCAddr string
+	KDCAddr         string
+	LocateKDCServer LocateKDCServer
 
 	// Discovery configures automatic desktop discovery via LDAP.
 	Discovery         []LDAPDiscoveryConfig
@@ -179,6 +180,20 @@ type LDAPConfig struct {
 	ServerName string
 	// CA is an optional CA cert to be used for verification if InsecureSkipVerify is set to false.
 	CA *x509.Certificate
+}
+
+// LocateKDCServer automatically locates the KDC server using DNS SRV records
+type LocateKDCServer struct {
+	// Enabled will automatically locate the KDC server using DNS SRV records.
+	// When enabled, Domain must be set, KDCAddress will be ignored
+	// https://web.mit.edu/kerberos/krb5-1.4/krb5-1.4.1/doc/krb5-admin/Hostnames-for-KDCs.html
+	Enabled bool
+	// Site is an KDC site to locate servers from a specific logical site.
+	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/b645c125-a7da-4097-84a1-2fa7cea07714#gt_8abdc986-5679-42d9-ad76-b11eb5a0daba
+	Site string
+	// Port is the port that should be used to connect to the KDC server.
+	// This will override the port returned by SRV records.
+	Port string
 }
 
 // CheckAndSetDefaults verifies this LDAPConfig

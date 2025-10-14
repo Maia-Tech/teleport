@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"maps"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -181,6 +182,8 @@ type WindowsServiceConfig struct {
 	// If empty LDAP address will be used.
 	// Used for NLA support when AD is true.
 	KDCAddr string
+	// LocateKDCServer automatically locates the KDC server using DNS SRV records
+	servicecfg.LocateKDCServer
 	// Discovery contains policies for configuring LDAP-based discovery.
 	Discovery []servicecfg.LDAPDiscoveryConfig
 	// DiscoveryInterval configures how frequently the discovery process runs.
@@ -788,7 +791,11 @@ func (s *WindowsService) connectRDP(ctx context.Context, log *slog.Logger, tdpCo
 	}
 	log = log.With("computer_name", computerName)
 
-	kdcAddr := s.cfg.KDCAddr
+	kdcAddr, err := s.getKDCAddress(ctx)
+	if err != nil {
+		return trace.Wrap(err, "getting KDC address")
+	}
+
 	if !desktop.NonAD() && kdcAddr == "" && s.cfg.LDAPConfig.Addr != "" {
 		if kdcAddr, err = utils.Host(s.cfg.LDAPConfig.Addr); err != nil {
 			return trace.Wrap(err, "KDC address is unspecified and LDAP address is invalid")
@@ -1329,4 +1336,79 @@ func (s *WindowsService) runCRLUpdateLoop(tlsConfig *tls.Config) {
 			continue
 		}
 	}
+}
+
+func (s *WindowsService) getKDCAddress(ctx context.Context) (string, error) {
+	if !s.cfg.LocateKDCServer.Enabled {
+		return s.cfg.KDCAddr, nil
+	}
+
+	s.cfg.Logger.DebugContext(
+		ctx,
+		"Looking for KDC server",
+		"Domain", s.cfg.Domain,
+		"Site", s.cfg.LocateKDCServer.Site,
+		"Port", s.cfg.LocateKDCServer.Port,
+	)
+	dialer := net.Dialer{}
+	dial := func(dialCtx context.Context, network, address string) (net.Conn, error) {
+		return dialer.DialContext(dialCtx, network, address)
+	}
+
+	// In development environments, the system's default resolver is unlikely to be
+	// able to resolve the Active Directory SRV records needed for server location,
+	// so we allow overriding the resolver.
+	if resolverAddr := os.Getenv("TELEPORT_KDC_RESOLVER"); resolverAddr != "" {
+		s.cfg.Logger.DebugContext(ctx, "Using custom DNS resolver address", "address", resolverAddr)
+		// Check if resolver address has a port
+		host, port, err := net.SplitHostPort(resolverAddr)
+		if err != nil {
+			host = resolverAddr
+			port = "53"
+		}
+
+		customResolverAddr := net.JoinHostPort(host, port)
+		dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+			return dialer.DialContext(ctx, network, customResolverAddr)
+		}
+	}
+
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial:     dial,
+	}
+
+	servers, err := winpki.LocateServerBySRV(
+		ctx,
+		s.cfg.Domain,
+		s.cfg.LocateKDCServer.Site,
+		resolver,
+		"kerberos",
+		s.cfg.LocateKDCServer.Port,
+	)
+	if err != nil {
+		return "", trace.Wrap(err, "locating KDC server")
+	}
+
+	if len(servers) == 0 {
+		return "", trace.NotFound("no KDC servers found for domain %q", s.cfg.Domain)
+	}
+
+	var lastErr error
+	for _, server := range servers {
+		conn, err := net.DialTimeout("tcp", server, 5*time.Second)
+		if conn != nil {
+			conn.Close()
+		}
+
+		if err == nil {
+			s.cfg.Logger.InfoContext(ctx, "Found KDC server", "server", server)
+			return server, nil
+		}
+		lastErr = err
+
+		s.cfg.Logger.InfoContext(ctx, "Error connecting to KDC server, trying next available server", "server", server, "error", err)
+	}
+
+	return "", trace.NotFound("no KDC servers responded successfully for domain %q: %v", s.cfg.Domain, lastErr)
 }

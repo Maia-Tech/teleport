@@ -855,13 +855,24 @@ windows_desktop_service:
       addr: example.com:636
 ```
 
-Alternatively, you can override the KDC address by specifying the `kdc_address`
-in your Teleport configuration file.
+Alternatively, you can override the KDC address by either specifying the `kdc_address`
+or enabling `locate_kdc_server` in your Teleport configuration file.
+`locate_kdc_server` discovers a KDC server from the DNS SRV records of your specified
+`domain`. This is useful if you have multiple KDC servers for high availability and
+load balancing.
 
 ```yaml
 windows_desktop_service:
     enabled: true
+
+    # Using the kdc_address method
     kdc_address: kdc.example.com   # defaults to port 88 if unspecified
+
+   # Or, the locate_kdc_server method
+   locate_kdc_server:
+      enabled: true
+      site: "my-site" # optional
+      port: 88 # optional, overrides DNS port
 ```
 
 To enable NLA, set the `TELEPORT_ENABLE_RDP_NLA` environment variable to `yes`

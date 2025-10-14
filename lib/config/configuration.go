@@ -2278,6 +2278,12 @@ func applyWindowsDesktopConfig(fc *FileConfig, cfg *servicecfg.Config) error {
 
 	cfg.WindowsDesktop.KDCAddr = fc.WindowsDesktop.KDCAddress
 
+	cfg.WindowsDesktop.LocateKDCServer = servicecfg.LocateKDCServer{
+		Enabled: fc.WindowsDesktop.LocateKDCServer.Enabled,
+		Site:    fc.WindowsDesktop.LocateKDCServer.Site,
+		Port:    fc.WindowsDesktop.LocateKDCServer.Port,
+	}
+
 	var hlrs []servicecfg.HostLabelRule
 	for _, rule := range fc.WindowsDesktop.HostLabels {
 		r, err := regexp.Compile(rule.Match)
