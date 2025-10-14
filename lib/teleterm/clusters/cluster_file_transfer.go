@@ -50,7 +50,7 @@ func (c *Cluster) TransferFile(ctx context.Context, clt *client.ClusterClient, r
 			nodeClient, err := c.clusterClient.ConnectToNode(ctx, clt, client.NodeDetails{
 				Addr:    addr,
 				Cluster: c.Name,
-			}, request.Login)
+			}, request.Login, nil) // TODO(cthach): Pass mfaChallengeFn
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}

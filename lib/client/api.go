@@ -69,6 +69,7 @@ import (
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
+	webauthnpb "github.com/gravitational/teleport/api/types/webauthn"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/api/utils/grpc/interceptors"
 	"github.com/gravitational/teleport/api/utils/keys"
@@ -1999,7 +2000,7 @@ func WithForkAfterAuthentication(onAuthenticate func() error) func(*SSHOptions) 
 // otherwise runs interactive shell
 //
 // Returns nil if successful, or (possibly) *exec.ExitError
-func (tc *TeleportClient) SSH(ctx context.Context, command []string, opts ...func(*SSHOptions)) error {
+func (tc *TeleportClient) SSH(ctx context.Context, mfaChallengeFn func(challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error), command []string, opts ...func(*SSHOptions)) error {
 	ctx, span := tc.Tracer.Start(
 		ctx,
 		"teleportClient/SSH",
@@ -2044,7 +2045,7 @@ func (tc *TeleportClient) SSH(ctx context.Context, command []string, opts ...fun
 		}
 		return tc.runShellOrCommandOnMultipleNodes(ctx, clt, nodeAddrs, command)
 	}
-	return tc.runShellOrCommandOnSingleNode(ctx, clt, nodeAddrs[0].Addr, command, options)
+	return tc.runShellOrCommandOnSingleNode(ctx, clt, mfaChallengeFn, nodeAddrs[0].Addr, command, options)
 }
 
 // ConnectToNode attempts to establish a connection to the node resolved to by the provided
@@ -2052,7 +2053,7 @@ func (tc *TeleportClient) SSH(ctx context.Context, command []string, opts ...fun
 // if per session mfa is required, after completing the mfa ceremony. In the event that both
 // fail the error from the connection attempt with the already provisioned certificates will
 // be returned. The client from whichever attempt succeeds first will be returned.
-func (tc *TeleportClient) ConnectToNode(ctx context.Context, clt *ClusterClient, nodeDetails NodeDetails, user string) (_ *NodeClient, err error) {
+func (tc *TeleportClient) ConnectToNode(ctx context.Context, clt *ClusterClient, nodeDetails NodeDetails, user string, mfaChallengeFn func(challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)) (_ *NodeClient, err error) {
 	node := nodeName(TargetNode{Addr: nodeDetails.Addr})
 	ctx, span := tc.Tracer.Start(
 		ctx,
@@ -2107,6 +2108,7 @@ func (tc *TeleportClient) ConnectToNode(ctx context.Context, clt *ClusterClient,
 		}
 
 		sshConfig := clt.ProxyClient.SSHConfig(user)
+
 		clt, err := NewNodeClient(connectCtx, sshConfig, conn, nodeDetails.ProxyFormat(), nodeDetails.Addr, tc, details.FIPS,
 			WithNodeHostname(nodeDetails.hostname), WithSSHLogDir(tc.SSHLogDir))
 		directResultC <- clientRes{clt: clt, err: err}
@@ -2249,7 +2251,7 @@ func (tc *TeleportClient) connectToNodeWithMFA(ctx context.Context, clt *Cluster
 	return nodeClient, trace.Wrap(err)
 }
 
-func (tc *TeleportClient) runShellOrCommandOnSingleNode(ctx context.Context, clt *ClusterClient, nodeAddr string, command []string, options SSHOptions) error {
+func (tc *TeleportClient) runShellOrCommandOnSingleNode(ctx context.Context, clt *ClusterClient, mfaChallengeFn func(challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error), nodeAddr string, command []string, options SSHOptions) error {
 	cluster := clt.ClusterName()
 	ctx, span := tc.Tracer.Start(
 		ctx,
@@ -2267,6 +2269,7 @@ func (tc *TeleportClient) runShellOrCommandOnSingleNode(ctx context.Context, clt
 		clt,
 		NodeDetails{Addr: nodeAddr, Cluster: cluster},
 		tc.Config.HostLogin,
+		mfaChallengeFn,
 	)
 	if err != nil {
 		tc.SetExitStatus(1)
@@ -2344,12 +2347,12 @@ func (tc *TeleportClient) runShellOrCommandOnMultipleNodes(ctx context.Context, 
 	// There was a command provided, run a non-interactive session against each match
 	if len(command) > 0 {
 		fmt.Printf("\x1b[1mWARNING\x1b[0m: Multiple nodes matched label selector, running command on all.\n")
-		return tc.runCommandOnNodes(ctx, clt, nodes, command)
+		return tc.runCommandOnNodes(ctx, clt, nodes, command) // TODO(cthach): Pass mfaChallengeFn
 	}
 
 	// Issue "shell" request to the first matching node.
 	fmt.Printf("\x1b[1mWARNING\x1b[0m: Multiple nodes match the label selector, picking first: %q\n", nodeAddrs[0])
-	return tc.runShellOrCommandOnSingleNode(ctx, clt, nodeAddrs[0], nil, SSHOptions{})
+	return tc.runShellOrCommandOnSingleNode(ctx, clt, nil, nodeAddrs[0], nil, SSHOptions{})
 }
 
 func (tc *TeleportClient) startPortForwarding(ctx context.Context, nodeClient *NodeClient) error {
@@ -2451,6 +2454,7 @@ func (tc *TeleportClient) Join(ctx context.Context, mode types.SessionParticipan
 		clt,
 		NodeDetails{Addr: session.GetAddress() + ":0", Cluster: clt.ClusterName()},
 		tc.Config.HostLogin,
+		nil, // TODO(cthach): Pass mfaChallengeFn
 	)
 	if err != nil {
 		return trace.Wrap(err)
@@ -2704,6 +2708,30 @@ func (tc *TeleportClient) SFTP(ctx context.Context, req SFTPRequest) error {
 	tc.Host = origHost
 	dest.Login = cmp.Or(dest.Login, tc.HostLogin)
 
+	// If MFA is required, prompt the user for the second factor.
+	// TODO(cthach): Handle SSO MFA challenges.
+	mfaChallengeFn := func(challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+		log.Info("Invoking MFA challenge handler for SFTP file transfer")
+
+		// TODO(cthach): Re-enable MFA prompt when backend supports it.
+		// return tc.NewMFAPrompt().Run(ctx, challenge) //nolint: contextcheck
+
+		// Return a dummy response for now.
+		return &proto.MFAAuthenticateResponse{
+			Response: &proto.MFAAuthenticateResponse_Webauthn{
+				Webauthn: &webauthnpb.CredentialAssertionResponse{
+					Type: "public-key",
+					Response: &webauthnpb.AuthenticatorAssertionResponse{
+						ClientDataJson:    []byte("{}"),
+						AuthenticatorData: []byte("{}"),
+						Signature:         []byte("{}"),
+						UserHandle:        []byte("{}"),
+					},
+				},
+			},
+		}, nil
+	}
+
 	sftpReq := &sftp.FileTransferRequest{
 		Sources:     sources,
 		Destination: dest,
@@ -2711,7 +2739,7 @@ func (tc *TeleportClient) SFTP(ctx context.Context, req SFTPRequest) error {
 			nodeClient, err := tc.ConnectToNode(ctx, clt, NodeDetails{
 				Addr:    addr,
 				Cluster: clt.ClusterName(),
-			}, login)
+			}, login, mfaChallengeFn)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
@@ -3079,6 +3107,7 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 					hostname: node.Hostname,
 				},
 				tc.Config.HostLogin,
+				nil, // TODO(cthach): Pass mfaChallengeFn
 			)
 			if err != nil {
 				// Returning the error here would cancel all the other goroutines, so
@@ -3322,6 +3351,29 @@ func (tc *TeleportClient) generateClientConfig(ctx context.Context) (*clientConf
 
 	hostKeyCallback := tc.HostKeyCallback
 	authMethods := slices.Clone(tc.Config.AuthMethods)
+
+	// Add MFA challenge handler.
+	authMethods = append(
+		authMethods,
+		ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+			// TODO(cthach): Properly do MFA challenges here.
+			for _, q := range questions {
+				fmt.Fprintf(tc.Stderr, "%s\n", q)
+
+				var answer string
+
+				_, err := fmt.Fscanln(tc.Stdin, &answer)
+				if err != nil {
+					return nil, trace.Wrap(err)
+				}
+
+				answers = append(answers, answer)
+			}
+
+			return answers, nil
+		}),
+	)
+
 	clusterName := func() string { return tc.SiteName }
 	if len(tc.JumpHosts) > 0 {
 		log.DebugContext(ctx, "Overriding SSH proxy to JumpHosts's address", "addr", logutils.StringerAttr(&tc.JumpHosts[0].Addr))

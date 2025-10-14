@@ -52,6 +52,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
+	"github.com/pingcap/log"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/ssh"
@@ -67,6 +68,7 @@ import (
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
+	webauthnpb "github.com/gravitational/teleport/api/types/webauthn"
 	"github.com/gravitational/teleport/api/types/wrappers"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/api/utils/keys/hardwarekey"
@@ -4085,11 +4087,36 @@ func onSSHLatency(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
+	// If MFA is required, prompt the user for the second factor.
+	// TODO(cthach): Handle SSO MFA challenges.
+	mfaChallengeFn := func(challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+		log.Info("Invoking MFA challenge handler for SSH latency check")
+
+		// TODO(cthach): Re-enable MFA prompt when backend supports it.
+		// return tc.NewMFAPrompt().Run(ctx, challenge) //nolint: contextcheck
+
+		// Return a dummy response for now.
+		return &proto.MFAAuthenticateResponse{
+			Response: &proto.MFAAuthenticateResponse_Webauthn{
+				Webauthn: &webauthnpb.CredentialAssertionResponse{
+					Type: "public-key",
+					Response: &webauthnpb.AuthenticatorAssertionResponse{
+						ClientDataJson:    []byte("{}"),
+						AuthenticatorData: []byte("{}"),
+						Signature:         []byte("{}"),
+						UserHandle:        []byte("{}"),
+					},
+				},
+			},
+		}, nil
+	}
+
 	nodeClient, err := tc.ConnectToNode(
 		cf.Context,
 		clt,
 		client.NodeDetails{Addr: target.Addr, Cluster: tc.SiteName},
 		tc.Config.HostLogin,
+		mfaChallengeFn,
 	)
 	if err != nil {
 		tc.SetExitStatus(1)
@@ -4281,6 +4308,32 @@ func onSSH(cf *CLIConf, initFunc ClientInitFunc) error {
 		cf.RemoteCommand = cf.RemoteCommand[1:]
 	}
 
+	// If MFA is required, prompt the user for the second factor.
+	// TODO(cthach): Handle SSO MFA challenges.
+	// If MFA is required, prompt the user for the second factor.
+	// TODO(cthach): Handle SSO MFA challenges.
+	mfaChallengeFn := func(challenge *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+		log.Info("Invoking MFA challenge handler for SSH")
+
+		// TODO(cthach): Re-enable MFA prompt when backend supports it.
+		// return tc.NewMFAPrompt().Run(ctx, challenge) //nolint: contextcheck
+
+		// Return a dummy response for now.
+		return &proto.MFAAuthenticateResponse{
+			Response: &proto.MFAAuthenticateResponse_Webauthn{
+				Webauthn: &webauthnpb.CredentialAssertionResponse{
+					Type: "public-key",
+					Response: &webauthnpb.AuthenticatorAssertionResponse{
+						ClientDataJson:    []byte("{}"),
+						AuthenticatorData: []byte("{}"),
+						Signature:         []byte("{}"),
+						UserHandle:        []byte("{}"),
+					},
+				},
+			},
+		}, nil
+	}
+
 	tc.Stdin = cf.Stdin()
 	err = retryWithAccessRequest(cf, tc, func() error {
 		sshFunc := func() error {
@@ -4301,7 +4354,7 @@ func onSSH(cf *CLIConf, initFunc ClientInitFunc) error {
 				}))
 			}
 
-			return tc.SSH(cf.Context, cf.RemoteCommand, opts...)
+			return tc.SSH(cf.Context, mfaChallengeFn, cf.RemoteCommand, opts...)
 		}
 		if !cf.Relogin {
 			err = sshFunc()
