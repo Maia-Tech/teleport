@@ -97,18 +97,8 @@ func (s *Server) CreateScopedToken(ctx context.Context, req *scopedjoiningv1.Cre
 		token.Metadata.Name = name
 	}
 
-	if err := services.ValidateScopedToken(token); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	token, err = s.backend.CreateScopedToken(ctx, token)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &scopedjoiningv1.CreateScopedTokenResponse{
-		Token: token,
-	}, nil
+	res, err := s.backend.CreateScopedToken(ctx, req)
+	return res, trace.Wrap(err)
 }
 
 // DeleteScopedToken implements [scopedjoiningv1.ScopedJoiningServiceServer].
@@ -123,11 +113,8 @@ func (s *Server) DeleteScopedToken(ctx context.Context, req *scopedjoiningv1.Del
 		return nil, trace.AccessDenied("user %q does not have permission to delete scoped tokens", authzContext.User.GetName())
 	}
 
-	if err := s.backend.DeleteScopedToken(ctx, req.GetName()); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &scopedjoiningv1.DeleteScopedTokenResponse{}, nil
+	res, err := s.backend.DeleteScopedToken(ctx, req)
+	return res, trace.Wrap(err)
 }
 
 // GetScopedToken implements [scopedjoiningv1.ScopedJoiningServiceServer].
@@ -142,43 +129,8 @@ func (s *Server) GetScopedToken(ctx context.Context, req *scopedjoiningv1.GetSco
 		return nil, trace.AccessDenied("user %q does not have permission to get scoped tokens", authzContext.User.GetName())
 	}
 
-	token, err := s.backend.GetScopedToken(ctx, req.GetName())
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &scopedjoiningv1.GetScopedTokenResponse{
-		Token: token,
-	}, nil
-}
-
-func getScopedTokenFiltersFromReq(req *scopedjoiningv1.ListScopedTokensRequest) (*services.ScopedTokenFilters, error) {
-	roles, err := types.NewTeleportRoles(req.Roles)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	filters := &services.ScopedTokenFilters{
-		AssignedScope: req.AssignedScope,
-		ResourceScope: req.ResourceScope,
-		Roles:         roles,
-		Labels:        req.Labels,
-	}
-
-	// we only want to return filters if at least one of the filters
-	// has been defined, otherwise we should return nil so that the
-	// backend can choose to perform a simple list operation instead
-	// of a list with filter
-	switch {
-	case filters.AssignedScope != nil:
-	case filters.ResourceScope != nil:
-	case len(filters.Roles) > 0:
-	case len(filters.Labels) > 0:
-	default:
-		filters = nil
-	}
-
-	return filters, nil
+	res, err := s.backend.GetScopedToken(ctx, req)
+	return res, trace.Wrap(err)
 }
 
 // ListScopedTokens implements [scopedjoiningv1.ScopedJoiningServiceServer].
@@ -193,33 +145,11 @@ func (s *Server) ListScopedTokens(ctx context.Context, req *scopedjoiningv1.List
 		return nil, trace.AccessDenied("user %q does not have permission to list scoped tokens", authzContext.User.GetName())
 	}
 
-	filters, err := getScopedTokenFiltersFromReq(req)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	tokens, cursor, err := s.backend.ListScopedTokens(ctx, int(req.Limit), req.Cursor, filters)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &scopedjoiningv1.ListScopedTokensResponse{
-		Tokens: tokens,
-		Cursor: cursor,
-	}, nil
+	res, err := s.backend.ListScopedTokens(ctx, req)
+	return res, trace.Wrap(err)
 }
 
 // UpdateScopedToken implements [scopedjoiningv1.ScopedJoiningServiceServer].
 func (s *Server) UpdateScopedToken(ctx context.Context, req *scopedjoiningv1.UpdateScopedTokenRequest) (*scopedjoiningv1.UpdateScopedTokenResponse, error) {
-	authzContext, err := s.authorizer.Authorize(ctx)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	if !authz.HasBuiltinRole(*authzContext, string(types.RoleAdmin)) {
-		s.logger.WarnContext(ctx, "user does not have permission to update scoped tokens", "user", authzContext.User.GetName())
-		return nil, trace.AccessDenied("user %q does not have permission to update scoped tokens", authzContext.User.GetName())
-	}
-
-	return nil, trace.NotImplemented("scoped tokens can not be updated")
+	return nil, trace.NotImplemented("scoped tokens must be recreated, they cannot be updated")
 }
