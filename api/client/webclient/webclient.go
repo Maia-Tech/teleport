@@ -91,6 +91,10 @@ type Config struct {
 	// UpdateID is used to vary the webapi response based on the
 	// client's Managed Update ID.
 	UpdateID string
+	// TLSConfig allows providing a custom TLS configuration for the HTTP client.
+	// If provided, this will be used instead of creating a new TLS config from
+	// Insecure and Pool fields.
+	TLSConfig *tls.Config
 }
 
 // CheckAndSetDefaults checks and sets defaults
@@ -117,11 +121,17 @@ func newWebClient(cfg *Config) (*http.Client, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	rt := utils.NewHTTPRoundTripper(&http.Transport{
-		TLSClientConfig: &tls.Config{
+	// Use custom TLS config if provided, otherwise create a default one
+	tlsConfig := cfg.TLSConfig
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{
 			InsecureSkipVerify: cfg.Insecure,
 			RootCAs:            cfg.Pool,
-		},
+		}
+	}
+
+	rt := utils.NewHTTPRoundTripper(&http.Transport{
+		TLSClientConfig: tlsConfig,
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			return httpproxy.FromEnvironment().ProxyFunc()(req.URL)
 		},

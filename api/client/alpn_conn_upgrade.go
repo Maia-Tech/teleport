@@ -188,7 +188,19 @@ func newALPNConnUpgradeDialer(dialer ContextDialer, tlsConfig *tls.Config, withP
 
 // DialContext implements ContextDialer
 func (d *alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	tlsConn, err := tlsutils.TLSDial(ctx, d.dialer, network, addr, d.tlsConfig.Clone())
+	// Clone the TLS config and add client certificate for OUTER TLS connection
+	outerTLSConfig := d.tlsConfig.Clone()
+
+	// Load client certificate for AWS ALB prototype
+	cert, err := tls.LoadX509KeyPair("/etc/teleport/auth.crt", "/etc/teleport/auth.key")
+	if err == nil {
+		// Use GetClientCertificate to force the client to always send the certificate
+		outerTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		}
+	}
+
+	tlsConn, err := tlsutils.TLSDial(ctx, d.dialer, network, addr, outerTLSConfig)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
