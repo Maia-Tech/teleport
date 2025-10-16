@@ -172,17 +172,21 @@ func isALPNConnUpgradeRequiredByEnv(addr, envValue string) bool {
 // alpnConnUpgradeDialer makes an "HTTP" upgrade call to the Proxy Service then
 // tunnels the connection with this connection upgrade.
 type alpnConnUpgradeDialer struct {
-	dialer    ContextDialer
-	tlsConfig *tls.Config
-	withPing  bool
+	dialer         ContextDialer
+	tlsConfig      *tls.Config
+	withPing       bool
+	clientCertFile string
+	clientKeyFile  string
 }
 
 // newALPNConnUpgradeDialer creates a new alpnConnUpgradeDialer.
-func newALPNConnUpgradeDialer(dialer ContextDialer, tlsConfig *tls.Config, withPing bool) ContextDialer {
+func newALPNConnUpgradeDialer(dialer ContextDialer, tlsConfig *tls.Config, withPing bool, clientCertFile, clientKeyFile string) ContextDialer {
 	return &alpnConnUpgradeDialer{
-		dialer:    dialer,
-		tlsConfig: tlsConfig,
-		withPing:  withPing,
+		dialer:         dialer,
+		tlsConfig:      tlsConfig,
+		withPing:       withPing,
+		clientCertFile: clientCertFile,
+		clientKeyFile:  clientKeyFile,
 	}
 }
 
@@ -191,12 +195,14 @@ func (d *alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr s
 	// Clone the TLS config and add client certificate for OUTER TLS connection
 	outerTLSConfig := d.tlsConfig.Clone()
 
-	// Load client certificate for AWS ALB prototype
-	cert, err := tls.LoadX509KeyPair("/etc/teleport/auth.crt", "/etc/teleport/auth.key")
-	if err == nil {
-		// Use GetClientCertificate to force the client to always send the certificate
-		outerTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return &cert, nil
+	// Load client certificate if configured (e.g., for AWS ALB)
+	if d.clientCertFile != "" && d.clientKeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(d.clientCertFile, d.clientKeyFile)
+		if err == nil {
+			// Use GetClientCertificate to force the client to always send the certificate
+			outerTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			}
 		}
 	}
 

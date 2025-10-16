@@ -402,12 +402,16 @@ type (
 
 // authConnect connects to the Teleport Auth Server directly or through Proxy.
 func authConnect(ctx context.Context, params connectParams) (*Client, error) {
-	dialer := NewDialer(ctx, params.cfg.KeepAlivePeriod, params.cfg.DialTimeout,
+	dialOpts := []DialOption{
 		WithInsecureSkipVerify(params.cfg.InsecureAddressDiscovery),
 		WithALPNConnUpgrade(params.cfg.ALPNConnUpgradeRequired),
 		WithALPNConnUpgradePing(true), // Use Ping protocol for long-lived connections.
 		WithPROXYHeaderGetter(params.cfg.PROXYHeaderGetter),
-	)
+	}
+	if params.cfg.ClientCertFile != "" && params.cfg.ClientKeyFile != "" {
+		dialOpts = append(dialOpts, WithClientCert(params.cfg.ClientCertFile, params.cfg.ClientKeyFile))
+	}
+	dialer := NewDialer(ctx, params.cfg.KeepAlivePeriod, params.cfg.DialTimeout, dialOpts...)
 
 	clt := newClient(params.cfg, dialer, params.tlsConfig)
 	if err := clt.dialGRPC(ctx, params.addr); err != nil {
@@ -662,6 +666,12 @@ type Config struct {
 	// SSOMFACeremonyConstructor is used to handle SSO MFA when needed.
 	// If nil, the client will not prompt for MFA.
 	SSOMFACeremonyConstructor mfa.SSOMFACeremonyConstructor
+	// ClientCertFile is the path to the client certificate file used for
+	// client certificate authentication (e.g., with AWS ALB).
+	ClientCertFile string
+	// ClientKeyFile is the path to the client certificate private key file
+	// used for client certificate authentication (e.g., with AWS ALB).
+	ClientKeyFile string
 }
 
 // CheckAndSetDefaults checks and sets default config values.

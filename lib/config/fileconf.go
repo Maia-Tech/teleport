@@ -641,6 +641,14 @@ type Global struct {
 
 	// DiagAddr is the address to expose a diagnostics HTTP endpoint.
 	DiagAddr string `yaml:"diag_addr"`
+
+	// ClientCertFile is the path to the client certificate file used for
+	// client certificate authentication (e.g., with AWS ALB).
+	ClientCertFile string `yaml:"client_cert_file,omitempty"`
+
+	// ClientKeyFile is the path to the client certificate private key file
+	// used for client certificate authentication (e.g., with AWS ALB).
+	ClientKeyFile string `yaml:"client_key_file,omitempty"`
 }
 
 // CachePolicy is used to control  local cache

@@ -56,6 +56,12 @@ type dialConfig struct {
 	// baseDialer is the base dialer used for dialing. If not specified, a
 	// direct net.Dialer will be used. Currently only used in tests.
 	baseDialer ContextDialer
+	// clientCertFile is the path to the client certificate file for client
+	// certificate authentication (e.g., with AWS ALB).
+	clientCertFile string
+	// clientKeyFile is the path to the client certificate private key file
+	// for client certificate authentication (e.g., with AWS ALB).
+	clientKeyFile string
 }
 
 func (c *dialConfig) getProxyURL(dialAddr string) *url.URL {
@@ -86,6 +92,15 @@ func WithALPNConnUpgrade(alpnConnUpgradeRequired bool) DialOption {
 func WithALPNConnUpgradePing(alpnConnUpgradeWithPing bool) DialOption {
 	return func(cfg *dialProxyConfig) {
 		cfg.alpnConnUpgradeWithPing = alpnConnUpgradeWithPing
+	}
+}
+
+// WithClientCert specifies the paths to the client certificate and key files
+// for client certificate authentication (e.g., with AWS ALB).
+func WithClientCert(certFile, keyFile string) DialOption {
+	return func(cfg *dialConfig) {
+		cfg.clientCertFile = certFile
+		cfg.clientKeyFile = keyFile
 	}
 }
 
@@ -220,7 +235,7 @@ func NewDialer(ctx context.Context, keepAlivePeriod, dialTimeout time.Duration, 
 
 		// Wrap with alpnConnUpgradeDialer if upgrade is required for TLS Routing.
 		if cfg.alpnConnUpgradeRequired {
-			dialer = newALPNConnUpgradeDialer(dialer, cfg.tlsConfig, cfg.alpnConnUpgradeWithPing)
+			dialer = newALPNConnUpgradeDialer(dialer, cfg.tlsConfig, cfg.alpnConnUpgradeWithPing, cfg.clientCertFile, cfg.clientKeyFile)
 		}
 
 		// Dial.
