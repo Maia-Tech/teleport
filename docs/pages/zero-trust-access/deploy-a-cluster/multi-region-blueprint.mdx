@@ -6,6 +6,17 @@ tags:
  - platform-wide
 ---
 
+<Admonition type="danger">
+This deployment drastically increases complexity and costs to provide
+multi-region resilience. Do not use this guide unless multi-region resilience
+is a requirement. We recommend the [High Availability
+Cluster](high-availability.mdx) for most deployments.
+
+Also, this guide must be followed precisely with no modifications or
+substitutions. If the guide is not followed or modifications have been made,
+Teleport will not be able to support your deployment.
+</Admonition>
+
 This page describes how to deploy a Teleport cluster in multiple regions to
 improve resiliency and sustain regional failure. This is not a step-by-step
 guide but a blueprint on how to build a multi-region Teleport cluster. This
