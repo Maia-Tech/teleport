@@ -1317,6 +1317,8 @@ func (process *TeleportProcess) newClientThroughTunnel(tlsConfig *tls.Config, ss
 		},
 		CircuitBreakerConfig: process.breakerConfigForRole(role),
 		DialTimeout:          process.Config.Testing.ClientTimeout,
+		ClientCertFile:       process.Config.ClientCertFile,
+		ClientKeyFile:        process.Config.ClientKeyFile,
 	})
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
@@ -1364,6 +1366,8 @@ func (process *TeleportProcess) newClientDirect(authServers []utils.NetAddr, tls
 		DialTimeout:          process.Config.Testing.ClientTimeout,
 		CircuitBreakerConfig: process.breakerConfigForRole(role),
 		DialOpts:             dialOpts,
+		ClientCertFile:       process.Config.ClientCertFile,
+		ClientKeyFile:        process.Config.ClientKeyFile,
 	}, cltParams...)
 	if err != nil {
 		return nil, nil, trace.Wrap(err)

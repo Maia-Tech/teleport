@@ -1276,6 +1276,23 @@ func NewTeleport(cfg *servicecfg.Config) (_ *TeleportProcess, err error) {
 		resolverAddr = cfg.AuthServerAddresses()[0]
 	}
 
+	// Create TLS config with client certificate if configured (e.g., for AWS ALB)
+	var resolverTLSConfig *tls.Config
+	if cfg.ClientCertFile != "" && cfg.ClientKeyFile != "" {
+		resolverTLSConfig = &tls.Config{
+			InsecureSkipVerify: lib.IsInsecureDevMode(),
+		}
+		cert, certErr := tls.LoadX509KeyPair(cfg.ClientCertFile, cfg.ClientKeyFile)
+		if certErr == nil {
+			// Use GetClientCertificate to force the client to always send the certificate
+			resolverTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			}
+		} else {
+			cfg.Logger.WarnContext(supervisor.ExitContext(), "Failed to load client certificate for resolver.", "error", certErr)
+		}
+	}
+
 	process.resolver, err = reversetunnelclient.CachingResolver(
 		process.ExitContext(),
 		reversetunnelclient.WebClientResolver(&webclient.Config{
@@ -1283,6 +1300,7 @@ func NewTeleport(cfg *servicecfg.Config) (_ *TeleportProcess, err error) {
 			ProxyAddr: resolverAddr.String(),
 			Insecure:  lib.IsInsecureDevMode(),
 			Timeout:   process.Config.Testing.ClientTimeout,
+			TLSConfig: resolverTLSConfig,
 		}),
 		process.Clock,
 	)

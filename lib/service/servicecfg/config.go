@@ -188,6 +188,14 @@ type Config struct {
 	// endpoint extended with additional /debug handlers
 	Debug bool
 
+	// ClientCertFile is the path to the client certificate file used for
+	// client certificate authentication (e.g., with AWS ALB).
+	ClientCertFile string
+
+	// ClientKeyFile is the path to the client certificate private key file
+	// used for client certificate authentication (e.g., with AWS ALB).
+	ClientKeyFile string
+
 	// FileDescriptors is an optional list of file descriptors for the process
 	// to inherit and use for listeners, used for in-process updates.
 	FileDescriptors []*FileDescriptor

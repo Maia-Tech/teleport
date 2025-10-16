@@ -654,6 +654,14 @@ func ApplyFileConfig(fc *FileConfig, cfg *servicecfg.Config) error {
 		slog.WarnContext(ctx, "ca_signing_algo config option is deprecated and will be removed in a future release, Teleport defaults to rsa-sha2-512")
 	}
 
+	// Apply client certificate settings for client certificate authentication
+	if fc.Global.ClientCertFile != "" {
+		cfg.ClientCertFile = fc.Global.ClientCertFile
+	}
+	if fc.Global.ClientKeyFile != "" {
+		cfg.ClientKeyFile = fc.Global.ClientKeyFile
+	}
+
 	// Read in how nodes will validate the CA. A single empty string in the file
 	// conf should indicate no pins.
 	if err = cfg.ApplyCAPins(fc.CAPin); err != nil {
