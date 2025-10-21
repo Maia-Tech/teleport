@@ -3478,6 +3478,8 @@ func (process *TeleportProcess) initSSH() error {
 					Server:               serverHandler,
 					FIPS:                 process.Config.FIPS,
 					ConnectedProxyGetter: proxyGetter,
+					ClientCertFile:       process.Config.ClientCertFile,
+					ClientKeyFile:        process.Config.ClientKeyFile,
 				})
 			if err != nil {
 				return trace.Wrap(err)
@@ -5565,6 +5567,8 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		Logger:              rcWatchLog,
 		LocalAuthAddresses:  utils.NetAddrsToStrings(process.Config.AuthServerAddresses()),
 		PROXYSigner:         proxySigner,
+		ClientCertFile:      process.Config.ClientCertFile,
+		ClientKeyFile:       process.Config.ClientKeyFile,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -6552,6 +6556,8 @@ func (process *TeleportProcess) initApps() {
 				Cluster:              clusterName,
 				FIPS:                 process.Config.FIPS,
 				ConnectedProxyGetter: proxyGetter,
+				ClientCertFile:       process.Config.ClientCertFile,
+				ClientKeyFile:        process.Config.ClientKeyFile,
 			})
 		if err != nil {
 			return trace.Wrap(err)

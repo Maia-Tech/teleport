@@ -193,6 +193,8 @@ func (process *TeleportProcess) initDatabaseService() (retErr error) {
 			Cluster:              clusterName,
 			FIPS:                 process.Config.FIPS,
 			ConnectedProxyGetter: proxyGetter,
+			ClientCertFile:       process.Config.ClientCertFile,
+			ClientKeyFile:        process.Config.ClientKeyFile,
 		})
 	if err != nil {
 		return trace.Wrap(err)

@@ -140,6 +140,12 @@ type AgentPoolConfig struct {
 	LocalAuthAddresses []string
 	// PROXYSigner is used to sign PROXY headers for securely propagating client IP address
 	PROXYSigner multiplexer.PROXYHeaderSigner
+	// ClientCertFile is the path to the client certificate file for
+	// mutual TLS authentication (e.g., with AWS ALB).
+	ClientCertFile string
+	// ClientKeyFile is the path to the client certificate private key file
+	// for mutual TLS authentication (e.g., with AWS ALB).
+	ClientKeyFile string
 }
 
 // CheckAndSetDefaults checks and sets defaults.
@@ -209,6 +215,8 @@ func NewAgentPool(ctx context.Context, config AgentPoolConfig) (*AgentPool, erro
 	}
 
 	pool.runtimeConfig.isRemoteCluster = pool.IsRemoteCluster
+	pool.runtimeConfig.clientCertFile = pool.ClientCertFile
+	pool.runtimeConfig.clientKeyFile = pool.ClientKeyFile
 	pool.newAgentFunc = pool.newAgent
 
 	pool.ctx, pool.cancel = context.WithCancel(ctx)
@@ -640,6 +648,12 @@ type agentPoolRuntimeConfig struct {
 	remoteTLSRoutingEnabled bool
 	// lastRemotePing is the time of the last ping attempt.
 	lastRemotePing *time.Time
+	// clientCertFile is the path to the client certificate file for
+	// mutual TLS authentication (e.g., with AWS ALB).
+	clientCertFile string
+	// clientKeyFile is the path to the client certificate private key file
+	// for mutual TLS authentication (e.g., with AWS ALB).
+	clientKeyFile string
 
 	mu             sync.RWMutex
 	updateRemoteMu sync.Mutex
@@ -708,6 +722,8 @@ func (c *agentPoolRuntimeConfig) alpnDialerConfig(getClusterCAs client.GetCluste
 		KeepAlivePeriod:         c.keepAliveInterval,
 		ALPNConnUpgradeRequired: c.tlsRoutingConnUpgradeRequired,
 		GetClusterCAs:           getClusterCAs,
+		ClientCertFile:          c.clientCertFile,
+		ClientKeyFile:           c.clientKeyFile,
 	}
 }
 

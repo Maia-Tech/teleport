@@ -88,6 +88,12 @@ type RemoteClusterTunnelManagerConfig struct {
 	LocalAuthAddresses []string
 	// PROXYSigner is used to sign PROXY headers for securely propagating client IP address
 	PROXYSigner multiplexer.PROXYHeaderSigner
+	// ClientCertFile is the path to the client certificate file for
+	// mutual TLS authentication (e.g., with AWS ALB).
+	ClientCertFile string
+	// ClientKeyFile is the path to the client certificate private key file
+	// for mutual TLS authentication (e.g., with AWS ALB).
+	ClientKeyFile string
 }
 
 func (c *RemoteClusterTunnelManagerConfig) CheckAndSetDefaults() error {
@@ -261,6 +267,8 @@ func realNewAgentPool(ctx context.Context, cfg RemoteClusterTunnelManagerConfig,
 		Resolver:        reversetunnelclient.StaticResolver(addr, apitypes.ProxyListenerMode_Separate),
 		IsRemoteCluster: true,
 		PROXYSigner:     cfg.PROXYSigner,
+		ClientCertFile:  cfg.ClientCertFile,
+		ClientKeyFile:   cfg.ClientKeyFile,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err, "failed creating reverse tunnel pool for remote cluster %q at address %q: %v", cluster, addr, err)

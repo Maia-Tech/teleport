@@ -195,22 +195,18 @@ func (d *alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr s
 	// Clone the TLS config and add client certificate for OUTER TLS connection
 	outerTLSConfig := d.tlsConfig.Clone()
 
-	clientCertFile := "/etc/teleport/auth.crt" // TODO: remove this
-	clientKeyFile := "/etc/teleport/auth.key" // TODO: remove this
-
 	// Load client certificate if configured (e.g., for AWS ALB or mutual TLS)
-	if clientCertFile != "" && clientKeyFile != "" {
-	//if d.clientCertFile != "" && d.clientKeyFile != "" {
+	if d.clientCertFile != "" && d.clientKeyFile != "" {
 		slog.DebugContext(ctx, "Loading client certificate for mTLS connection",
 			"cert_file", d.clientCertFile,
 			"key_file", d.clientKeyFile)
-		cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+		cert, err := tls.LoadX509KeyPair(d.clientCertFile, d.clientKeyFile)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to load client certificate for mTLS",
-				"cert_file", clientCertFile,
-				"key_file", clientKeyFile,
+				"cert_file", d.clientCertFile,
+				"key_file", d.clientKeyFile,
 				"error", err)
-			return nil, trace.Wrap(err, "failed to load client certificate from %s and %s", clientCertFile, clientKeyFile)
+			return nil, trace.Wrap(err, "failed to load client certificate from %s and %s", d.clientCertFile, d.clientKeyFile)
 		}
 		// Use GetClientCertificate to force the client to always send the certificate
 		outerTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
