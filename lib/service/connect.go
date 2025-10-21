@@ -1193,33 +1193,33 @@ func (process *TeleportProcess) newClient(connector *Connector) (*authclient.Cli
 
 	// Load additional client certificate if configured for mutual TLS (e.g., AWS ALB)
 	// This is separate from the Teleport identity-based certificate
-	var additionalClientCert *tls.Certificate
-	if process.Config.ClientCertFile != "" && process.Config.ClientKeyFile != "" {
-		process.logger.DebugContext(process.ExitContext(), "Loading additional client certificate for mutual TLS",
-			"cert_file", process.Config.ClientCertFile,
-			"key_file", process.Config.ClientKeyFile,
-			"identity", connector.Role())
-		cert, err := tls.LoadX509KeyPair(process.Config.ClientCertFile, process.Config.ClientKeyFile)
-		if err != nil {
-			process.logger.ErrorContext(process.ExitContext(), "Failed to load client certificate for mutual TLS",
-				"cert_file", process.Config.ClientCertFile,
-				"key_file", process.Config.ClientKeyFile,
-				"identity", connector.Role(),
-				"error", err)
-			return nil, nil, trace.Wrap(err, "failed to load client certificate from %s and %s", process.Config.ClientCertFile, process.Config.ClientKeyFile)
-		}
-		additionalClientCert = &cert
-		process.logger.InfoContext(process.ExitContext(), "Successfully loaded additional client certificate for mutual TLS",
-			"identity", connector.Role())
-	}
+	//var additionalClientCert *tls.Certificate
+	//if process.Config.ClientCertFile != "" && process.Config.ClientKeyFile != "" {
+	//	process.logger.DebugContext(process.ExitContext(), "Loading additional client certificate for mutual TLS",
+	//		"cert_file", process.Config.ClientCertFile,
+	//		"key_file", process.Config.ClientKeyFile,
+	//		"identity", connector.Role())
+	//	cert, err := tls.LoadX509KeyPair(process.Config.ClientCertFile, process.Config.ClientKeyFile)
+	//	if err != nil {
+	//		process.logger.ErrorContext(process.ExitContext(), "Failed to load client certificate for mutual TLS",
+	//			"cert_file", process.Config.ClientCertFile,
+	//			"key_file", process.Config.ClientKeyFile,
+	//			"identity", connector.Role(),
+	//			"error", err)
+	//		return nil, nil, trace.Wrap(err, "failed to load client certificate from %s and %s", process.Config.ClientCertFile, process.Config.ClientKeyFile)
+	//	}
+		//additionalClientCert = &cert
+		//process.logger.InfoContext(process.ExitContext(), "Successfully loaded additional client certificate for mutual TLS",
+		//	"identity", connector.Role())
+	//}
 
 	tlsConfig.GetClientCertificate = func(requestInfo *tls.CertificateRequestInfo) (*tls.Certificate, error) {
 		// If mutual TLS is enabled and additional client cert is configured, use it
 		// This handles scenarios like AWS ALB where an external mTLS cert is required
-		if additionalClientCert != nil {
-			process.logger.DebugContext(process.ExitContext(), "Using additional client certificate for mTLS connection")
-			return additionalClientCert, nil
-		}
+		//if additionalClientCert != nil {
+		//	process.logger.DebugContext(process.ExitContext(), "Using additional client certificate for mTLS connection")
+		//	return additionalClientCert, nil
+		//}
 
 		// Otherwise use the standard Teleport identity certificate
 		tlsCert, err := connector.ClientGetCertificate()
