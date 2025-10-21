@@ -58,6 +58,12 @@ type ALPNDialerConfig struct {
 	// PROXYHeaderGetter is used if present to get signed PROXY headers to propagate client's IP.
 	// Used by proxy's web server to make calls on behalf of connected clients.
 	PROXYHeaderGetter PROXYHeaderGetter
+	// ClientCertFile is the path to the client certificate file for
+	// mutual TLS authentication (e.g., with AWS ALB).
+	ClientCertFile string
+	// ClientKeyFile is the path to the client certificate private key file
+	// for mutual TLS authentication (e.g., with AWS ALB).
+	ClientKeyFile string
 }
 
 // ALPNDialer is a ContextDialer that dials a connection to the Proxy Service
@@ -130,12 +136,19 @@ func (d *ALPNDialer) DialContext(ctx context.Context, network, addr string) (net
 		return nil, trace.Wrap(err)
 	}
 
-	dialer := NewDialer(ctx, d.cfg.DialTimeout, d.cfg.DialTimeout,
+	dialOpts := []DialOption{
 		WithInsecureSkipVerify(d.cfg.TLSConfig.InsecureSkipVerify),
 		WithALPNConnUpgrade(d.cfg.ALPNConnUpgradeRequired),
 		WithALPNConnUpgradePing(shouldALPNConnUpgradeWithPing(tlsConfig)),
 		WithPROXYHeaderGetter(d.cfg.PROXYHeaderGetter),
-	)
+	}
+
+	// Pass client certificate configuration if provided for mutual TLS
+	if d.cfg.ClientCertFile != "" && d.cfg.ClientKeyFile != "" {
+		dialOpts = append(dialOpts, WithClientCert(d.cfg.ClientCertFile, d.cfg.ClientKeyFile))
+	}
+
+	dialer := NewDialer(ctx, d.cfg.DialTimeout, d.cfg.DialTimeout, dialOpts...)
 
 	conn, err := dialer.DialContext(ctx, network, addr)
 	if err != nil {

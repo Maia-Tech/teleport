@@ -1276,20 +1276,28 @@ func NewTeleport(cfg *servicecfg.Config) (_ *TeleportProcess, err error) {
 		resolverAddr = cfg.AuthServerAddresses()[0]
 	}
 
-	// Create TLS config with client certificate if configured (e.g., for AWS ALB)
+	// Create TLS config with client certificate if configured (e.g., for AWS ALB or mutual TLS)
 	var resolverTLSConfig *tls.Config
 	if cfg.ClientCertFile != "" && cfg.ClientKeyFile != "" {
+		cfg.Logger.DebugContext(supervisor.ExitContext(), "Loading client certificate for reverse tunnel resolver",
+			"cert_file", cfg.ClientCertFile,
+			"key_file", cfg.ClientKeyFile)
 		resolverTLSConfig = &tls.Config{
 			InsecureSkipVerify: lib.IsInsecureDevMode(),
 		}
 		cert, certErr := tls.LoadX509KeyPair(cfg.ClientCertFile, cfg.ClientKeyFile)
-		if certErr == nil {
-			// Use GetClientCertificate to force the client to always send the certificate
-			resolverTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-				return &cert, nil
-			}
-		} else {
-			cfg.Logger.WarnContext(supervisor.ExitContext(), "Failed to load client certificate for resolver.", "error", certErr)
+		if certErr != nil {
+			cfg.Logger.ErrorContext(supervisor.ExitContext(), "Failed to load client certificate for reverse tunnel resolver",
+				"cert_file", cfg.ClientCertFile,
+				"key_file", cfg.ClientKeyFile,
+				"error", certErr)
+			return nil, trace.Wrap(certErr, "failed to load client certificate for reverse tunnel resolver from %s and %s", cfg.ClientCertFile, cfg.ClientKeyFile)
+		}
+		cfg.Logger.InfoContext(supervisor.ExitContext(), "Successfully loaded client certificate for reverse tunnel resolver")
+		// Use GetClientCertificate to force the client to always send the certificate
+		resolverTLSConfig.GetClientCertificate = func(requestInfo *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			cfg.Logger.DebugContext(supervisor.ExitContext(), "Sending client certificate for mTLS connection to reverse tunnel")
+			return &cert, nil
 		}
 	}
 

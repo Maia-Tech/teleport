@@ -195,15 +195,25 @@ func (d *alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr s
 	// Clone the TLS config and add client certificate for OUTER TLS connection
 	outerTLSConfig := d.tlsConfig.Clone()
 
-	// Load client certificate if configured (e.g., for AWS ALB)
+	// Load client certificate if configured (e.g., for AWS ALB or mutual TLS)
 	if d.clientCertFile != "" && d.clientKeyFile != "" {
+		slog.DebugContext(ctx, "Loading client certificate for mTLS connection",
+			"cert_file", d.clientCertFile,
+			"key_file", d.clientKeyFile)
 		cert, err := tls.LoadX509KeyPair(d.clientCertFile, d.clientKeyFile)
-		if err == nil {
-			// Use GetClientCertificate to force the client to always send the certificate
-			outerTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-				return &cert, nil
-			}
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to load client certificate for mTLS",
+				"cert_file", d.clientCertFile,
+				"key_file", d.clientKeyFile,
+				"error", err)
+			return nil, trace.Wrap(err, "failed to load client certificate from %s and %s", d.clientCertFile, d.clientKeyFile)
 		}
+		// Use GetClientCertificate to force the client to always send the certificate
+		outerTLSConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			slog.DebugContext(ctx, "Sending client certificate for mTLS connection")
+			return &cert, nil
+		}
+		slog.DebugContext(ctx, "Successfully loaded client certificate for mTLS connection")
 	}
 
 	tlsConn, err := tlsutils.TLSDial(ctx, d.dialer, network, addr, outerTLSConfig)

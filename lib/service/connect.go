@@ -1190,11 +1190,47 @@ func (process *TeleportProcess) getConnector(clientIdentity, serverIdentity *sta
 // to the Auth Server through the proxy.
 func (process *TeleportProcess) newClient(connector *Connector) (*authclient.Client, *proto.PingResponse, error) {
 	tlsConfig := utils.TLSConfig(process.Config.CipherSuites)
-	tlsConfig.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+
+	// Load additional client certificate if configured for mutual TLS (e.g., AWS ALB)
+	// This is separate from the Teleport identity-based certificate
+	var additionalClientCert *tls.Certificate
+	if process.Config.ClientCertFile != "" && process.Config.ClientKeyFile != "" {
+		process.logger.DebugContext(process.ExitContext(), "Loading additional client certificate for mutual TLS",
+			"cert_file", process.Config.ClientCertFile,
+			"key_file", process.Config.ClientKeyFile,
+			"identity", connector.Role())
+		cert, err := tls.LoadX509KeyPair(process.Config.ClientCertFile, process.Config.ClientKeyFile)
+		if err != nil {
+			process.logger.ErrorContext(process.ExitContext(), "Failed to load client certificate for mutual TLS",
+				"cert_file", process.Config.ClientCertFile,
+				"key_file", process.Config.ClientKeyFile,
+				"identity", connector.Role(),
+				"error", err)
+			return nil, nil, trace.Wrap(err, "failed to load client certificate from %s and %s", process.Config.ClientCertFile, process.Config.ClientKeyFile)
+		}
+		additionalClientCert = &cert
+		process.logger.InfoContext(process.ExitContext(), "Successfully loaded additional client certificate for mutual TLS",
+			"identity", connector.Role())
+	}
+
+	tlsConfig.GetClientCertificate = func(requestInfo *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		// If mutual TLS is enabled and additional client cert is configured, use it
+		// This handles scenarios like AWS ALB where an external mTLS cert is required
+		if additionalClientCert != nil {
+			process.logger.DebugContext(process.ExitContext(), "Using additional client certificate for mTLS connection")
+			return additionalClientCert, nil
+		}
+
+		// Otherwise use the standard Teleport identity certificate
 		tlsCert, err := connector.ClientGetCertificate()
 		if err != nil {
+			process.logger.ErrorContext(process.ExitContext(), "Failed to get Teleport identity certificate",
+				"identity", connector.Role(),
+				"error", err)
 			return nil, trace.Wrap(err)
 		}
+		process.logger.DebugContext(process.ExitContext(), "Using Teleport identity certificate for connection",
+			"identity", connector.Role())
 		return tlsCert, nil
 	}
 	tlsConfig.ServerName = apiutils.EncodeClusterName(connector.ClusterName())
@@ -1208,14 +1244,21 @@ func (process *TeleportProcess) newClient(connector *Connector) (*authclient.Cli
 
 	authServers := process.Config.AuthServerAddresses()
 	connectToAuthServer := func(logger *slog.Logger) (*authclient.Client, *proto.PingResponse, error) {
-		logger.DebugContext(process.ExitContext(), "Attempting to connect to Auth Server directly.")
+		logger.InfoContext(process.ExitContext(), "Attempting to connect to Auth Server directly.",
+			"auth_servers", utils.NetAddrsToStrings(authServers),
+			"identity", connector.Role(),
+			"has_client_cert_file", process.Config.ClientCertFile != "")
 		clt, pingResponse, err := process.newClientDirect(authServers, tlsConfig, connector.Role())
 		if err != nil {
-			logger.DebugContext(process.ExitContext(), "Failed to connect to Auth Server directly.")
+			logger.ErrorContext(process.ExitContext(), "Failed to connect to Auth Server directly.",
+				"error", err,
+				"identity", connector.Role())
 			return nil, nil, err
 		}
 
-		logger.DebugContext(process.ExitContext(), "Connected to Auth Server with direct connection.")
+		logger.InfoContext(process.ExitContext(), "Successfully connected to Auth Server with direct connection.",
+			"identity", connector.Role(),
+			"remote_addr", pingResponse.RemoteAddr)
 		return clt, pingResponse, nil
 	}
 
@@ -1223,7 +1266,9 @@ func (process *TeleportProcess) newClient(connector *Connector) (*authclient.Cli
 	// for config v1 and v2, attempt to directly connect to the auth server and fall back to tunneling
 	case defaults.TeleportConfigVersionV1, defaults.TeleportConfigVersionV2:
 		// if we don't have a proxy address, try to connect to the auth server directly
-		logger := process.logger.With("auth_addrs", utils.NetAddrsToStrings(authServers))
+		logger := process.logger.With("auth_addrs", utils.NetAddrsToStrings(authServers),
+			"config_version", process.Config.Version,
+			"identity", connector.Role())
 
 		directClient, resp, directErr := connectToAuthServer(logger)
 		if directErr == nil {
@@ -1232,13 +1277,15 @@ func (process *TeleportProcess) newClient(connector *Connector) (*authclient.Cli
 
 		// Don't attempt to connect through a tunnel as a proxy or auth server.
 		if connector.Role() == types.RoleAuth || connector.Role() == types.RoleProxy {
+			logger.ErrorContext(process.ExitContext(), "Auth/Proxy role cannot connect through tunnel, failing.",
+				"role", connector.Role())
 			return nil, nil, trace.Wrap(directErr)
 		}
 
 		// if that fails, attempt to connect to the auth server through a tunnel
 
-		logger.DebugContext(process.ExitContext(), "Attempting to discover reverse tunnel address.")
-		logger.DebugContext(process.ExitContext(), "Attempting to connect to Auth Server through tunnel.")
+		logger.InfoContext(process.ExitContext(), "Direct connection failed, attempting to discover reverse tunnel address.")
+		logger.InfoContext(process.ExitContext(), "Attempting to connect to Auth Server through tunnel.")
 
 		tunnelClient, pingResponse, err := process.newClientThroughTunnel(tlsConfig, sshClientConfig, connector.Role(), connector.ClientGetPool)
 		if err != nil {
@@ -1255,27 +1302,34 @@ func (process *TeleportProcess) newClient(connector *Connector) (*authclient.Cli
 			return nil, nil, trace.Wrap(collectedErrs, "Failed to connect to Auth Server directly or over tunnel, no methods remaining.")
 		}
 
-		logger.DebugContext(process.ExitContext(), "Connected to Auth Server through tunnel.")
+		logger.InfoContext(process.ExitContext(), "Successfully connected to Auth Server through tunnel.")
 		return tunnelClient, pingResponse, nil
 
 	// for config v3, either tunnel to the given proxy server or directly connect to the given auth server
 	case defaults.TeleportConfigVersionV3:
 		proxyServer := process.Config.ProxyServer
 		if !proxyServer.IsEmpty() {
-			logger := process.logger.With("proxy_server", proxyServer.String())
-			logger.DebugContext(process.ExitContext(), "Attempting to connect to Auth Server through tunnel.")
+			logger := process.logger.With("proxy_server", proxyServer.String(),
+				"config_version", process.Config.Version,
+				"identity", connector.Role())
+			logger.InfoContext(process.ExitContext(), "Attempting to connect to Auth Server through tunnel.")
 			tunnelClient, pingResponse, err := process.newClientThroughTunnel(tlsConfig, sshClientConfig, connector.Role(), connector.ClientGetPool)
 			if err != nil {
+				logger.ErrorContext(process.ExitContext(), "Failed to connect to Proxy Server through tunnel",
+					"error", err)
 				return nil, nil, trace.Errorf("Failed to connect to Proxy Server through tunnel: %v", err)
 			}
 
-			logger.DebugContext(process.ExitContext(), "Connected to Auth Server through tunnel.")
+			logger.InfoContext(process.ExitContext(), "Successfully connected to Auth Server through tunnel.",
+				"remote_addr", pingResponse.RemoteAddr)
 
 			return tunnelClient, pingResponse, nil
 		}
 
 		// if we don't have a proxy address, try to connect to the auth server directly
-		logger := process.logger.With("auth_server", utils.NetAddrsToStrings(authServers))
+		logger := process.logger.With("auth_server", utils.NetAddrsToStrings(authServers),
+			"config_version", process.Config.Version,
+			"identity", connector.Role())
 
 		return connectToAuthServer(logger)
 	}
@@ -1297,6 +1351,10 @@ func (process *TeleportProcess) breakerConfigForRole(role types.SystemRole) brea
 }
 
 func (process *TeleportProcess) newClientThroughTunnel(tlsConfig *tls.Config, sshConfig *ssh.ClientConfig, role types.SystemRole, getClusterCAs func() (*x509.CertPool, error)) (*authclient.Client, *proto.PingResponse, error) {
+	process.logger.DebugContext(process.ExitContext(), "Creating tunnel dialer for auth connection",
+		"identity", role,
+		"has_client_cert_config", process.Config.ClientCertFile != "")
+
 	dialer, err := reversetunnelclient.NewTunnelAuthDialer(reversetunnelclient.TunnelAuthDialerConfig{
 		Resolver:              process.resolver,
 		ClientConfig:          sshConfig,
@@ -1305,6 +1363,8 @@ func (process *TeleportProcess) newClientThroughTunnel(tlsConfig *tls.Config, ss
 		GetClusterCAs: func(context.Context) (*x509.CertPool, error) {
 			return getClusterCAs()
 		},
+		ClientCertFile: process.Config.ClientCertFile,
+		ClientKeyFile:  process.Config.ClientKeyFile,
 	})
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
@@ -1337,6 +1397,10 @@ func (process *TeleportProcess) newClientThroughTunnel(tlsConfig *tls.Config, ss
 }
 
 func (process *TeleportProcess) newClientDirect(authServers []utils.NetAddr, tlsConfig *tls.Config, role types.SystemRole) (*authclient.Client, *proto.PingResponse, error) {
+	process.logger.DebugContext(process.ExitContext(), "Creating direct client to auth server",
+		"identity", role,
+		"has_client_cert_config", process.Config.ClientCertFile != "")
+
 	var cltParams []roundtrip.ClientParam
 	if process.Config.Testing.ClientTimeout != 0 {
 		cltParams = []roundtrip.ClientParam{
@@ -1357,6 +1421,10 @@ func (process *TeleportProcess) newClientDirect(authServers []utils.NetAddr, tls
 		}...)
 	}
 
+	process.logger.DebugContext(process.ExitContext(), "Initializing auth client with direct connection",
+		"identity", role,
+		"auth_servers", utils.NetAddrsToStrings(authServers))
+
 	clt, err := authclient.NewClient(apiclient.Config{
 		Context: process.ExitContext(),
 		Addrs:   utils.NetAddrsToStrings(authServers),
@@ -1370,17 +1438,28 @@ func (process *TeleportProcess) newClientDirect(authServers []utils.NetAddr, tls
 		ClientKeyFile:        process.Config.ClientKeyFile,
 	}, cltParams...)
 	if err != nil {
+		process.logger.ErrorContext(process.ExitContext(), "Failed to create auth client",
+			"identity", role,
+			"error", err)
 		return nil, nil, trace.Wrap(err)
 	}
 
 	// If connected, make sure the connector's client works by using
 	// a call that should succeed at all times (Ping).
+	process.logger.DebugContext(process.ExitContext(), "Sending Ping to verify connection",
+		"identity", role)
 	ctx, cancel := context.WithTimeout(process.ExitContext(), apidefaults.DefaultIOTimeout)
 	defer cancel()
 	resp, err := clt.Ping(ctx)
 	if err != nil {
+		process.logger.ErrorContext(process.ExitContext(), "Ping to auth server failed",
+			"identity", role,
+			"error", err)
 		return nil, nil, trace.NewAggregate(err, clt.Close())
 	}
 
+	process.logger.DebugContext(process.ExitContext(), "Successfully pinged auth server",
+		"identity", role,
+		"server_version", resp.ServerVersion)
 	return clt, &resp, nil
 }

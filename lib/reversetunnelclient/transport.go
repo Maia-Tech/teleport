@@ -56,6 +56,12 @@ type TunnelAuthDialerConfig struct {
 	InsecureSkipTLSVerify bool
 	// GetClusterCAs contains cluster CAs.
 	GetClusterCAs client.GetClusterCAsFunc
+	// ClientCertFile is the path to the client certificate file for
+	// mutual TLS authentication (e.g., with AWS ALB).
+	ClientCertFile string
+	// ClientKeyFile is the path to the client certificate private key file
+	// for mutual TLS authentication (e.g., with AWS ALB).
+	ClientKeyFile string
 }
 
 func (c *TunnelAuthDialerConfig) CheckAndSetDefaults() error {
@@ -93,7 +99,7 @@ func (t *TunnelAuthDialer) DialContext(ctx context.Context, _, _ string) (net.Co
 	}
 
 	if mode == types.ProxyListenerMode_Multiplex {
-		opts = append(opts, proxy.WithALPNDialer(client.ALPNDialerConfig{
+		alpnDialerConfig := client.ALPNDialerConfig{
 			TLSConfig: &tls.Config{
 				NextProtos: []string{
 					string(alpncommon.ProtocolReverseTunnelV2),
@@ -104,7 +110,18 @@ func (t *TunnelAuthDialer) DialContext(ctx context.Context, _, _ string) (net.Co
 			DialTimeout:             t.ClientConfig.Timeout,
 			ALPNConnUpgradeRequired: client.IsALPNConnUpgradeRequired(ctx, addr.Addr, t.InsecureSkipTLSVerify),
 			GetClusterCAs:           t.GetClusterCAs,
-		}))
+			ClientCertFile:          t.ClientCertFile,
+			ClientKeyFile:           t.ClientKeyFile,
+		}
+
+		// Log if client certificate is configured for mutual TLS
+		if t.ClientCertFile != "" && t.ClientKeyFile != "" {
+			t.Log.DebugContext(ctx, "Configuring ALPN dialer with client certificate for mutual TLS",
+				"cert_file", t.ClientCertFile,
+				"key_file", t.ClientKeyFile)
+		}
+
+		opts = append(opts, proxy.WithALPNDialer(alpnDialerConfig))
 	}
 
 	dialer := proxy.DialerFromEnvironment(addr.Addr, opts...)
